@@ -23,7 +23,6 @@ export function Thumbnail({ file, size = 160 }: Props) {
   const [phase, setPhase] = useState<'idle' | 'loading' | 'loaded' | 'error'>('idle')
   const [thumbUrl, setThumbUrl] = useState<string | null>(null)
   const ref = useRef<HTMLDivElement>(null)
-  const isMobile = typeof window !== 'undefined' && window.innerWidth <= 768
 
   const hasThumbnail = !!file.thumb_msg_id
 
@@ -54,7 +53,7 @@ export function Thumbnail({ file, size = 160 }: Props) {
       ref={ref}
       style={{
         width: size,
-        height: size - (isMobile ? 21 : 0),
+        height: size,
         position: 'relative',
         background: 'var(--bg-2)',
         overflow: 'hidden',
