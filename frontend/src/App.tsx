@@ -19,7 +19,7 @@ function App() {
   }, [setChannel])
 
   return (
-    <BrowserRouter>
+    <BrowserRouter basename={import.meta.env.BASE_URL}>
       <Routes>
         {/* Public share links — no sidebar */}
         <Route path="/s/:token" element={<ShareView />} />
