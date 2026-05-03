@@ -5,6 +5,7 @@ import base64
 import zipfile
 import json
 import io
+import os
 from typing import Optional
 
 from fastapi import APIRouter, HTTPException, Request
@@ -19,29 +20,24 @@ router = APIRouter(prefix="/api/files", tags=["files"])
 LOCAL_HEADER_SIG = b'PK\x03\x04'
 ZIP_CHUNK = 512 * 1024   # 512 KB per read
 
+THUMBS_DIR = os.getenv("THUMBS_DIR", "/tmp/teledrive_thumbs")
+
 # Global in-memory cache for thumbnails downloaded from zips
 thumb_cache = {}
 
 async def load_thumb_zip(channel_id: int, zip_msg_id: int):
-    """Downloads a thumbnail zip from Telegram and loads it into memory cache."""
+    """Downloads a thumbnail zip from Telegram and extracts it to disk."""
     app = await get_client()
     try:
         msg = await app.get_messages(channel_id, zip_msg_id)
         if msg and msg.document:
             buf = await app.download_media(msg, in_memory=True)
             if buf:
+                out_dir = os.path.join(THUMBS_DIR, str(channel_id))
+                os.makedirs(out_dir, exist_ok=True)
                 with zipfile.ZipFile(buf) as z:
-                    mapping = json.loads(z.read("mapping.json").decode("utf-8"))
-                    count = 0
-                    for msg_id, filename in mapping.items():
-                        try:
-                            img_data = z.read(filename)
-                            b64 = base64.b64encode(img_data).decode("utf-8")
-                            thumb_cache[(channel_id, int(msg_id))] = f"data:image/jpeg;base64,{b64}"
-                            count += 1
-                        except Exception:
-                            pass
-                    print(f"[THUMB ZIP] Loaded {count} thumbnails for channel {channel_id}")
+                    z.extractall(out_dir)
+                print(f"[THUMB ZIP] Extracted thumbnails for channel {channel_id} to {out_dir}")
     except Exception as e:
         print(f"[THUMB ZIP] Error loading zip for {channel_id}: {e}")
 
@@ -187,13 +183,37 @@ async def get_thumbnails_batch(message_ids: str, channel_id: int):
     res = {}
     missing_mids = []
     
-    # Check memory cache first
+    map_file = os.path.join(THUMBS_DIR, str(channel_id), "mapping.json")
+    mapping = {}
+    if os.path.exists(map_file):
+        try:
+            with open(map_file, "r") as f:
+                mapping = json.load(f)
+        except Exception:
+            pass
+
+    # Check memory cache and disk first
     for m in mids:
         cached = thumb_cache.get((channel_id, m))
         if cached:
             res[str(m)] = cached
         else:
-            missing_mids.append(m)
+            filename = mapping.get(str(m))
+            disk_loaded = False
+            if filename:
+                file_path = os.path.join(THUMBS_DIR, str(channel_id), filename)
+                if os.path.exists(file_path):
+                    try:
+                        with open(file_path, "rb") as f:
+                            b64 = base64.b64encode(f.read()).decode("utf-8")
+                            data_str = f"data:image/jpeg;base64,{b64}"
+                            thumb_cache[(channel_id, m)] = data_str
+                            res[str(m)] = data_str
+                            disk_loaded = True
+                    except Exception:
+                        pass
+            if not disk_loaded:
+                missing_mids.append(m)
             
     if not missing_mids:
         return res
