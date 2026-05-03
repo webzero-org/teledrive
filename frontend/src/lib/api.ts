@@ -160,6 +160,27 @@ export const loadThumbnail = (message_id: number, channel_id: number): Promise<s
   })
 }
 
+const requestedPrefetch = new Set<string>()
+
+export const prefetchThumbnail = (message_id: number, channel_id: number) => {
+  const cacheKey = `${message_id}:${channel_id}`
+  if (requestedPrefetch.has(cacheKey)) return
+  requestedPrefetch.add(cacheKey)
+  
+  cacheGet(cacheKey).then(cached => {
+    if (cached) return
+    thumbQueue.push({ 
+      message_id, 
+      channel_id, 
+      resolve: () => {}, 
+      reject: () => {} 
+    })
+    if (!thumbTimeout) {
+      thumbTimeout = setTimeout(flushThumbnails, 50)
+    }
+  }).catch(() => {})
+}
+
 async function flushThumbnails() {
   const batch = thumbQueue
   thumbQueue = []

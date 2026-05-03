@@ -12,7 +12,7 @@
 import { useRef, useState, useEffect, useCallback } from 'react'
 import { useVirtualizer } from '@tanstack/react-virtual'
 import { CheckCircle, Circle } from 'lucide-react'
-import { FileDoc } from '../lib/api'
+import { FileDoc, prefetchThumbnail } from '../lib/api'
 import { Thumbnail } from './Thumbnail'
 import { fmtBytes } from '../lib/utils'
 import { useStore } from '../lib/store'
@@ -21,7 +21,7 @@ import { useStore } from '../lib/store'
 /** Desired tile width in pixels — grid adapts to always fill the container */
 const TARGET_TILE_PX = 182
 const MIN_COLS = 2
-const GAP_PX = 2
+const GAP_PX = 0
 
 interface Props {
   files: FileDoc[]
@@ -107,6 +107,21 @@ function GridView({ files, selected, toggleSelect, onOpen, containerRef }: GridV
     estimateSize: () => rowH,
     overscan: 4,
   })
+
+  // Prefetch next batch of thumbnails
+  const virtualItems = rowVirtualizer.getVirtualItems()
+  const lastVirtualRow = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : -1
+
+  useEffect(() => {
+    if (lastVirtualRow === -1) return
+    const nextItemIndex = (lastVirtualRow + 1) * cols
+    // Prefetch roughly 5 rows ahead
+    const prefetchCount = cols * 5
+    for (let i = nextItemIndex; i < nextItemIndex + prefetchCount && i < files.length; i++) {
+      const f = files[i]
+      if (f.thumb_msg_id) prefetchThumbnail(f.message_id, f.channel_id)
+    }
+  }, [lastVirtualRow, cols, files])
 
   const enterSelectMode = useCallback(() => setIsSelecting(true), [])
 
@@ -286,6 +301,21 @@ function ListView({ files, selected, toggleSelect, onOpen }: {
     estimateSize: () => LIST_H,
     overscan: 10,
   })
+
+  // Prefetch next batch of thumbnails
+  const virtualItems = rowVirtualizer.getVirtualItems()
+  const lastVirtualRow = virtualItems.length > 0 ? virtualItems[virtualItems.length - 1].index : -1
+
+  useEffect(() => {
+    if (lastVirtualRow === -1) return
+    const nextItemIndex = lastVirtualRow + 1
+    // Prefetch roughly 20 items ahead for list view
+    const prefetchCount = 20
+    for (let i = nextItemIndex; i < nextItemIndex + prefetchCount && i < files.length; i++) {
+      const f = files[i]
+      if (f.thumb_msg_id) prefetchThumbnail(f.message_id, f.channel_id)
+    }
+  }, [lastVirtualRow, files])
 
   return (
     <div ref={parentRef} style={{ flex: 1, overflowY: 'auto' }}>
