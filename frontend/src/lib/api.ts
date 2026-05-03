@@ -1,5 +1,4 @@
 const BASE = import.meta.env.VITE_API_URL ?? ''
-console.log('TeleDrive API Base:', BASE || 'window.location.origin')
 
 export type MediaType = 'image' | 'video' | 'audio' | 'document'
 export type ViewMode = 'grid' | 'list'
@@ -150,12 +149,12 @@ async function flushThumbnails() {
   const batch = thumbQueue
   thumbQueue = []
   thumbTimeout = null
-  
+
   if (batch.length === 0) return
-  
+
   const channel_id = batch[0].channel_id
   const message_ids = batch.map(b => b.message_id).join(',')
-  
+
   try {
     const res = await api.files.thumbnailsBatch(message_ids, channel_id)
     for (const b of batch) {
